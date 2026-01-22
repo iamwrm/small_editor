@@ -197,6 +197,33 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      cursor: text;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .session-name-manual {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      opacity: 0.6;
+    }
+
+    .session-name-input {
+      width: 100%;
+      padding: 4px 8px;
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      outline: none;
+    }
+
+    .session-name-input:focus {
+      box-shadow: 0 0 0 2px var(--accent-soft);
     }
 
     .session-meta {
@@ -878,6 +905,7 @@
         const defaultSession = {
           id: generateId(),
           name: 'New Draft',
+          isNameManual: false,
           content: '# Welcome to Compose\n\nWrite your email in **Markdown** format.\n\n## Features\n\n- Live preview\n- File attachments\n- Paste images with ⌘V / Ctrl+V\n- Export as ZIP\n\n> Start typing to see your email come to life!',
           files: [],
           createdAt: Date.now(),
@@ -892,9 +920,12 @@
       const [isDragging, setIsDragging] = useState(false);
       const [toast, setToast] = useState({ show: false, message: '', type: 'success', progress: undefined });
       const [isProcessing, setIsProcessing] = useState(false);
+      const [editingSessionId, setEditingSessionId] = useState(null);
+      const [editingName, setEditingName] = useState('');
 
       const fileInputRef = useRef(null);
       const zipInputRef = useRef(null);
+      const renameInputRef = useRef(null);
       const objectUrlsRef = useRef(new Map()); // Track object URLs for cleanup
 
       const activeSession = useMemo(() => 
@@ -991,6 +1022,7 @@
         const newSession = {
           id: generateId(),
           name: 'Untitled Draft',
+          isNameManual: false,
           content: '',
           files: [],
           createdAt: Date.now(),
@@ -1033,10 +1065,49 @@
         ));
       };
 
+      const startRenaming = (session, e) => {
+        e.stopPropagation();
+        setEditingSessionId(session.id);
+        setEditingName(session.name);
+        setTimeout(() => renameInputRef.current?.focus(), 0);
+      };
+
+      const finishRenaming = () => {
+        if (editingSessionId && editingName.trim()) {
+          updateSession(editingSessionId, { 
+            name: editingName.trim().slice(0, 40), 
+            isNameManual: true 
+          });
+          showToast('Session renamed');
+        }
+        setEditingSessionId(null);
+        setEditingName('');
+      };
+
+      const cancelRenaming = () => {
+        setEditingSessionId(null);
+        setEditingName('');
+      };
+
+      const handleRenameKeyDown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finishRenaming();
+        } else if (e.key === 'Escape') {
+          cancelRenaming();
+        }
+      };
+
       const handleContentChange = (e) => {
         const content = e.target.value;
-        const name = content.split('\n')[0].replace(/^#+\s*/, '').slice(0, 40) || 'Untitled Draft';
-        updateSession(activeSessionId, { content, name });
+        const updates = { content };
+        
+        // Only auto-update name if it hasn't been manually set
+        if (!activeSession?.isNameManual) {
+          updates.name = content.split('\n')[0].replace(/^#+\s*/, '').slice(0, 40) || 'Untitled Draft';
+        }
+        
+        updateSession(activeSessionId, updates);
       };
 
       const handleFilesAdd = useCallback(async (newFiles, insertInline = false, cursorPos = null) => {
@@ -1092,13 +1163,17 @@
           }
         }
         
-        const name = newContent.split('\n')[0].replace(/^#+\s*/, '').slice(0, 40) || 'Untitled Draft';
-        
-        updateSession(activeSessionId, {
+        const updates = {
           files: [...currentFiles, ...files],
-          content: newContent,
-          name
-        });
+          content: newContent
+        };
+        
+        // Only auto-update name if it hasn't been manually set
+        if (!activeSession?.isNameManual) {
+          updates.name = newContent.split('\n')[0].replace(/^#+\s*/, '').slice(0, 40) || 'Untitled Draft';
+        }
+        
+        updateSession(activeSessionId, updates);
         
         hideToast();
         showToast(`${files.length} file(s) added`);
@@ -1394,7 +1469,24 @@
                   className={`session-item ${session.id === activeSessionId ? 'active' : ''}`}
                   onClick={() => setActiveSessionId(session.id)}
                 >
-                  <div className="session-name">{session.name}</div>
+                  {editingSessionId === session.id ? (
+                    <input
+                      ref={renameInputRef}
+                      type="text"
+                      className="session-name-input"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onBlur={finishRenaming}
+                      onKeyDown={handleRenameKeyDown}
+                      onClick={(e) => e.stopPropagation()}
+                      maxLength={40}
+                    />
+                  ) : (
+                    <div className="session-name" onDoubleClick={(e) => startRenaming(session, e)}>
+                      {session.name}
+                      {session.isNameManual && <span className="session-name-manual" title="Manually renamed">✎</span>}
+                    </div>
+                  )}
                   <div className="session-meta">
                     <span>{formatDate(session.updatedAt)}</span>
                     {session.files.length > 0 && (
@@ -1402,11 +1494,14 @@
                     )}
                   </div>
                   <div className="session-actions">
+                    <button className="session-action-btn" onClick={(e) => startRenaming(session, e)} title="Rename">
+                      ✎ Rename
+                    </button>
                     <button className="session-action-btn" disabled={isProcessing} onClick={(e) => { e.stopPropagation(); exportAsZip(session); }}>
                       ↓ Export
                     </button>
                     <button className="session-action-btn danger" disabled={isProcessing} onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}>
-                      ✕ Delete
+                      ✕
                     </button>
                   </div>
                 </div>
