@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Compose — Email Editor</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0a0b;
+      --bg-secondary: #111113;
+      --bg-tertiary: #1a1a1d;
+      --bg-hover: #222225;
+      --border: #2a2a2e;
+      --border-active: #3a3a3f;
+      --text-primary: #fafafa;
+      --text-secondary: #a0a0a5;
+      --text-muted: #606065;
+      --accent: #ff6b35;
+      --accent-soft: rgba(255, 107, 53, 0.15);
+      --success: #10b981;
+      --danger: #ef4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Outfit', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    ::selection {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-active);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .sidebar::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 1px;
+      height: 100%;
+      background: linear-gradient(180deg, var(--accent) 0%, transparent 50%);
+      opacity: 0.3;
+    }
+
+    .logo {
+      padding: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent) 0%, #ff8f5a 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .sessions-header {
+      padding: 20px 24px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sessions-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    .new-session-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      font-size: 18px;
+    }
+
+    .new-session-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-active);
+      color: var(--text-primary);
+    }
+
+    .sessions-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 12px;
+    }
+
+    .session-item {
+      padding: 14px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-bottom: 4px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .session-item:hover {
+      background: var(--bg-hover);
+    }
+
+    .session-item.active {
+      background: var(--accent-soft);
+    }
+
+    .session-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 60%;
+      background: var(--accent);
+      border-radius: 0 2px 2px 0;
+    }
+
+    .session-name {
+      font-weight: 500;
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .session-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .session-files-badge {
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 4px;
+      margin-top: 8px;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .session-item:hover .session-actions {
+      opacity: 1;
+    }
+
+    .session-action-btn {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .session-action-btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .session-action-btn.danger:hover {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .session-action-btn:disabled,
+    .upload-btn:disabled,
+    .import-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* Main Content */
+    .main {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-secondary);
+    }
+
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .view-toggle {
+      display: flex;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      padding: 3px;
+    }
+
+    .view-btn {
+      padding: 8px 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .view-btn.active {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .upload-btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .upload-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .import-btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .import-btn:hover {
+      background: var(--bg-hover);
+    }
+
+    /* Editor Area */
+    .editor-container {
+      flex: 1;
+      display: grid;
+      overflow: hidden;
+    }
+
+    .editor-container.split {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .editor-pane, .preview-pane {
+      height: 100%;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .editor-pane {
+      border-right: 1px solid var(--border);
+    }
+
+    .pane-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      background: var(--bg-secondary);
+    }
+
+    .editor-textarea {
+      flex: 1;
+      width: 100%;
+      padding: 24px;
+      border: none;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      line-height: 1.7;
+      resize: none;
+      outline: none;
+    }
+
+    .editor-textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .preview-content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      background: var(--bg-primary);
+    }
+
+    .preview-content h1 { font-size: 2rem; margin-bottom: 1rem; font-weight: 600; }
+    .preview-content h2 { font-size: 1.5rem; margin: 1.5rem 0 0.75rem; font-weight: 600; }
+    .preview-content h3 { font-size: 1.25rem; margin: 1.25rem 0 0.5rem; font-weight: 500; }
+    .preview-content p { margin-bottom: 1rem; line-height: 1.7; color: var(--text-secondary); }
+    .preview-content ul, .preview-content ol { margin: 1rem 0; padding-left: 1.5rem; color: var(--text-secondary); }
+    .preview-content li { margin-bottom: 0.5rem; }
+    .preview-content code { 
+      background: var(--bg-tertiary); 
+      padding: 2px 6px; 
+      border-radius: 4px; 
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+    }
+    .preview-content pre { 
+      background: var(--bg-secondary); 
+      padding: 16px; 
+      border-radius: 8px; 
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    .preview-content pre code { background: transparent; padding: 0; }
+    .preview-content blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 16px;
+      margin: 1rem 0;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    .preview-content a { color: var(--accent); }
+    .preview-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    .preview-content img { max-width: 100%; border-radius: 8px; margin: 1rem 0; }
+
+    /* Files Section */
+    .files-section {
+      border-top: 1px solid var(--border);
+      background: var(--bg-secondary);
+    }
+
+    .files-header {
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .files-header:hover {
+      background: var(--bg-hover);
+    }
+
+    .files-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .files-count {
+      background: var(--bg-tertiary);
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+    }
+
+    .files-toggle {
+      color: var(--text-muted);
+      transition: transform 0.2s ease;
+    }
+
+    .files-toggle.open {
+      transform: rotate(180deg);
+    }
+
+    .files-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      padding: 16px 20px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .file-card {
+      background: var(--bg-tertiary);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: all 0.15s ease;
+      position: relative;
+      group: file;
+    }
+
+    .file-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .file-preview {
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-primary);
+      font-size: 2rem;
+    }
+
+    .file-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .file-info {
+      padding: 10px 12px;
+    }
+
+    .file-name {
+      font-size: 0.75rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-size {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .file-remove {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.7);
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      opacity: 0;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+
+    .file-card:hover .file-remove {
+      opacity: 1;
+    }
+
+    .file-remove:hover {
+      background: var(--danger);
+      color: white;
+    }
+
+    /* Drop Zone */
+    .drop-zone {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 10, 11, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .drop-zone.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .drop-zone-content {
+      text-align: center;
+      padding: 60px;
+      border: 2px dashed var(--accent);
+      border-radius: 20px;
+      background: var(--accent-soft);
+    }
+
+    .drop-zone-icon {
+      font-size: 4rem;
+      margin-bottom: 16px;
+    }
+
+    .drop-zone-text {
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .drop-zone-hint {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* Empty State */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 40px;
+    }
+
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .empty-state-text {
+      font-size: 0.9rem;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      padding: 14px 20px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 1001;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.success { border-color: var(--success); }
+    .toast.error { border-color: var(--danger); }
+    .toast.loading { border-color: var(--accent); }
+    .toast.loading span:first-child {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .toast-progress {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--bg-primary);
+      border-radius: 0 0 10px 10px;
+      overflow: hidden;
+    }
+
+    .toast-progress-bar {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.2s ease;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        display: none;
+      }
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .session-item {
+      animation: fadeIn 0.2s ease;
+    }
+
+    .file-card {
+      animation: fadeIn 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    // Utility functions
+    const generateId = () => Math.random().toString(36).substr(2, 9);
+    const formatDate = (date) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const formatFileSize = (bytes) => {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
+    const getFileIcon = (type) => {
+      if (type.startsWith('image/')) return '🖼️';
+      if (type.includes('pdf')) return '📄';
+      if (type.includes('word') || type.includes('document')) return '📝';
+      if (type.includes('sheet') || type.includes('excel')) return '📊';
+      if (type.includes('zip') || type.includes('archive')) return '📦';
+      return '📎';
+    };
+
+    // IndexedDB for efficient large file storage
+    const FileDB = {
+      dbName: 'ComposeFilesDB',
+      storeName: 'files',
+      db: null,
+
+      async init() {
+        if (this.db) return this.db;
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(this.dbName, 1);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            this.db = request.result;
+            resolve(this.db);
+          };
+          request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(this.storeName)) {
+              db.createObjectStore(this.storeName, { keyPath: 'id' });
+            }
+          };
+        });
+      },
+
+      async saveFile(id, blob) {
+        const db = await this.init();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(this.storeName, 'readwrite');
+          tx.objectStore(this.storeName).put({ id, blob });
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      },
+
+      async getFile(id) {
+        const db = await this.init();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(this.storeName, 'readonly');
+          const request = tx.objectStore(this.storeName).get(id);
+          request.onsuccess = () => resolve(request.result?.blob);
+          request.onerror = () => reject(request.error);
+        });
+      },
+
+      async deleteFile(id) {
+        const db = await this.init();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(this.storeName, 'readwrite');
+          tx.objectStore(this.storeName).delete(id);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      },
+
+      async deleteFiles(ids) {
+        const db = await this.init();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(this.storeName, 'readwrite');
+          const store = tx.objectStore(this.storeName);
+          ids.forEach(id => store.delete(id));
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+    };
+
+    // Convert Blob to base64 in chunks (non-blocking)
+    const blobToBase64Async = (blob, onProgress) => {
+      return new Promise((resolve, reject) => {
+        const chunkSize = 1024 * 1024; // 1MB chunks
+        const chunks = [];
+        let offset = 0;
+
+        const readNextChunk = () => {
+          const slice = blob.slice(offset, offset + chunkSize);
+          const reader = new FileReader();
+          
+          reader.onload = () => {
+            chunks.push(new Uint8Array(reader.result));
+            offset += chunkSize;
+            
+            if (onProgress) {
+              onProgress(Math.min(offset / blob.size, 1));
+            }
+
+            if (offset < blob.size) {
+              // Use setTimeout to yield to main thread
+              setTimeout(readNextChunk, 0);
+            } else {
+              // Combine all chunks
+              const combined = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+              let position = 0;
+              chunks.forEach(chunk => {
+                combined.set(chunk, position);
+                position += chunk.length;
+              });
+              
+              // Convert to base64
+              let binary = '';
+              const len = combined.byteLength;
+              for (let i = 0; i < len; i += 8192) {
+                binary += String.fromCharCode.apply(null, combined.subarray(i, Math.min(i + 8192, len)));
+              }
+              resolve(btoa(binary));
+            }
+          };
+          
+          reader.onerror = () => reject(reader.error);
+          reader.readAsArrayBuffer(slice);
+        };
+
+        readNextChunk();
+      });
+    };
+
+    // Toast Component
+    const Toast = ({ message, type, show, progress }) => (
+      <div className={`toast ${type} ${show ? 'show' : ''}`}>
+        <span>{type === 'success' ? '✓' : type === 'loading' ? '⏳' : '✕'}</span>
+        <span>{message}</span>
+        {progress !== undefined && progress < 1 && (
+          <div className="toast-progress">
+            <div className="toast-progress-bar" style={{ width: `${progress * 100}%` }} />
+          </div>
+        )}
+      </div>
+    );
+
+    // Main App
+    const App = () => {
+      const [sessions, setSessions] = useState(() => {
+        const saved = localStorage.getItem('email-sessions');
+        if (saved) return JSON.parse(saved);
+        const defaultSession = {
+          id: generateId(),
+          name: 'New Draft',
+          content: '# Welcome to Compose\n\nWrite your email in **Markdown** format.\n\n## Features\n\n- Live preview\n- File attachments\n- Paste images with ⌘V / Ctrl+V\n- Export as ZIP\n\n> Start typing to see your email come to life!',
+          files: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        return [defaultSession];
+      });
+
+      const [activeSessionId, setActiveSessionId] = useState(sessions[0]?.id);
+      const [viewMode, setViewMode] = useState('split');
+      const [showFiles, setShowFiles] = useState(true);
+      const [isDragging, setIsDragging] = useState(false);
+      const [toast, setToast] = useState({ show: false, message: '', type: 'success', progress: undefined });
+      const [isProcessing, setIsProcessing] = useState(false);
+
+      const fileInputRef = useRef(null);
+      const zipInputRef = useRef(null);
+      const objectUrlsRef = useRef(new Map()); // Track object URLs for cleanup
+
+      const activeSession = useMemo(() => 
+        sessions.find(s => s.id === activeSessionId), 
+        [sessions, activeSessionId]
+      );
+
+      // Initialize FileDB on mount
+      useEffect(() => {
+        FileDB.init().catch(console.error);
+      }, []);
+
+      // Persist sessions (metadata only, files in IndexedDB)
+      useEffect(() => {
+        localStorage.setItem('email-sessions', JSON.stringify(sessions));
+      }, [sessions]);
+
+      // Cleanup object URLs on unmount
+      useEffect(() => {
+        return () => {
+          objectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+        };
+      }, []);
+
+      // Restore object URLs for active session files from IndexedDB
+      useEffect(() => {
+        const restoreObjectUrls = async () => {
+          if (!activeSession?.files?.length) return;
+          
+          const filesToUpdate = [];
+          
+          for (const file of activeSession.files) {
+            if (!file.objectUrl && !objectUrlsRef.current.has(file.id)) {
+              const blob = await FileDB.getFile(file.id);
+              if (blob) {
+                const url = URL.createObjectURL(blob);
+                objectUrlsRef.current.set(file.id, url);
+                filesToUpdate.push({ id: file.id, objectUrl: url });
+              }
+            }
+          }
+          
+          // Batch update if we restored any URLs
+          if (filesToUpdate.length > 0) {
+            setSessions(prev => prev.map(s => {
+              if (s.id !== activeSessionId) return s;
+              return {
+                ...s,
+                files: s.files.map(f => {
+                  const updated = filesToUpdate.find(u => u.id === f.id);
+                  return updated ? { ...f, objectUrl: updated.objectUrl } : f;
+                })
+              };
+            }));
+          }
+        };
+        
+        restoreObjectUrls();
+      }, [activeSessionId]); // Only run when active session changes
+
+      const showToast = (message, type = 'success', progress = undefined) => {
+        setToast({ show: true, message, type, progress });
+        if (type !== 'loading') {
+          setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+        }
+      };
+
+      const updateToastProgress = (progress) => {
+        setToast(prev => ({ ...prev, progress }));
+      };
+
+      const hideToast = () => {
+        setToast(prev => ({ ...prev, show: false }));
+      };
+
+      // Get or create object URL for a file
+      const getFilePreviewUrl = useCallback(async (file) => {
+        if (file.objectUrl) return file.objectUrl;
+        if (objectUrlsRef.current.has(file.id)) {
+          return objectUrlsRef.current.get(file.id);
+        }
+        
+        // Try to get blob from IndexedDB
+        const blob = await FileDB.getFile(file.id);
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          objectUrlsRef.current.set(file.id, url);
+          return url;
+        }
+        return null;
+      }, []);
+
+      const createSession = () => {
+        const newSession = {
+          id: generateId(),
+          name: 'Untitled Draft',
+          content: '',
+          files: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        setSessions(prev => [newSession, ...prev]);
+        setActiveSessionId(newSession.id);
+        showToast('New session created');
+      };
+
+      const deleteSession = async (id) => {
+        if (sessions.length === 1) {
+          showToast('Cannot delete the last session', 'error');
+          return;
+        }
+        
+        // Cleanup files from IndexedDB and object URLs
+        const sessionToDelete = sessions.find(s => s.id === id);
+        if (sessionToDelete?.files?.length) {
+          const fileIds = sessionToDelete.files.map(f => f.id);
+          fileIds.forEach(fileId => {
+            if (objectUrlsRef.current.has(fileId)) {
+              URL.revokeObjectURL(objectUrlsRef.current.get(fileId));
+              objectUrlsRef.current.delete(fileId);
+            }
+          });
+          await FileDB.deleteFiles(fileIds);
+        }
+        
+        setSessions(prev => prev.filter(s => s.id !== id));
+        if (activeSessionId === id) {
+          setActiveSessionId(sessions.find(s => s.id !== id)?.id);
+        }
+        showToast('Session deleted');
+      };
+
+      const updateSession = (id, updates) => {
+        setSessions(prev => prev.map(s => 
+          s.id === id ? { ...s, ...updates, updatedAt: Date.now() } : s
+        ));
+      };
+
+      const handleContentChange = (e) => {
+        const content = e.target.value;
+        const name = content.split('\n')[0].replace(/^#+\s*/, '').slice(0, 40) || 'Untitled Draft';
+        updateSession(activeSessionId, { content, name });
+      };
+
+      const handleFilesAdd = useCallback(async (newFiles, insertInline = false, cursorPos = null) => {
+        if (isProcessing) return;
+        
+        const filesToAdd = Array.from(newFiles);
+        const totalSize = filesToAdd.reduce((acc, f) => acc + f.size, 0);
+        
+        if (totalSize > 100 * 1024 * 1024) { // > 100MB total
+          showToast('Adding large files...', 'loading', 0);
+        }
+
+        const files = [];
+        
+        for (let i = 0; i < filesToAdd.length; i++) {
+          const file = filesToAdd[i];
+          const id = generateId();
+          
+          // Create object URL immediately (no memory overhead)
+          const objectUrl = URL.createObjectURL(file);
+          objectUrlsRef.current.set(id, objectUrl);
+          
+          // Store blob in IndexedDB asynchronously
+          await FileDB.saveFile(id, file);
+          
+          files.push({
+            id,
+            name: file.name || `file_${Date.now()}`,
+            type: file.type || 'application/octet-stream',
+            size: file.size,
+            objectUrl // For preview
+          });
+          
+          if (totalSize > 100 * 1024 * 1024) {
+            updateToastProgress((i + 1) / filesToAdd.length);
+          }
+        }
+
+        const currentFiles = activeSession?.files || [];
+        const currentContent = activeSession?.content || '';
+        
+        let newContent = currentContent;
+        
+        if (insertInline && cursorPos !== null) {
+          // Insert markdown image references at cursor position
+          const imageMarkdown = files
+            .filter(f => f.type.startsWith('image/'))
+            .map(f => `![${f.name}](attachment:${f.id})`)
+            .join('\n');
+          
+          if (imageMarkdown) {
+            newContent = currentContent.slice(0, cursorPos) + imageMarkdown + currentContent.slice(cursorPos);
+          }
+        }
+        
+        const name = newContent.split('\n')[0].replace(/^#+\s*/, '').slice(0, 40) || 'Untitled Draft';
+        
+        updateSession(activeSessionId, {
+          files: [...currentFiles, ...files],
+          content: newContent,
+          name
+        });
+        
+        hideToast();
+        showToast(`${files.length} file(s) added`);
+      }, [activeSessionId, activeSession, isProcessing]);
+
+      // Handle paste for images
+      const handlePaste = useCallback((e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
+        
+        if (imageItems.length > 0) {
+          e.preventDefault();
+          const cursorPos = e.target.selectionStart;
+          const files = imageItems.map(item => item.getAsFile()).filter(Boolean);
+          handleFilesAdd(files, true, cursorPos);
+        }
+      }, [handleFilesAdd]);
+
+      const removeFile = async (fileId) => {
+        // Cleanup object URL
+        if (objectUrlsRef.current.has(fileId)) {
+          URL.revokeObjectURL(objectUrlsRef.current.get(fileId));
+          objectUrlsRef.current.delete(fileId);
+        }
+        
+        // Remove from IndexedDB
+        await FileDB.deleteFile(fileId);
+        
+        updateSession(activeSessionId, {
+          files: activeSession.files.filter(f => f.id !== fileId)
+        });
+        showToast('File removed');
+      };
+
+      // Drag and drop
+      const handleDragOver = (e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      };
+
+      const handleDragLeave = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+      };
+
+      const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files.length > 0) {
+          handleFilesAdd(e.dataTransfer.files);
+        }
+      };
+
+      // ZIP Export
+      const exportAsZip = async (session) => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+        
+        const totalFiles = session.files.length;
+        const totalSize = session.files.reduce((acc, f) => acc + f.size, 0);
+        
+        showToast('Preparing export...', 'loading', 0);
+        
+        try {
+          const zip = new JSZip();
+          
+          // Build a map of attachment IDs to filenames for replacement
+          const idToFilename = {};
+          session.files.forEach(file => {
+            idToFilename[file.id] = file.name;
+          });
+          
+          // Replace attachment:id references with relative paths
+          let exportContent = session.content;
+          Object.entries(idToFilename).forEach(([id, filename]) => {
+            const pattern = new RegExp(`attachment:${id}`, 'g');
+            exportContent = exportContent.replace(pattern, `./attachments/${filename}`);
+          });
+          
+          // Add markdown content with resolved paths
+          zip.file('content.md', exportContent);
+          
+          // Add files from IndexedDB - pass Blobs directly (no base64 conversion!)
+          const filesFolder = zip.folder('attachments');
+          
+          for (let i = 0; i < session.files.length; i++) {
+            const file = session.files[i];
+            const blob = await FileDB.getFile(file.id);
+            
+            if (blob) {
+              // JSZip accepts Blobs directly - much faster than base64!
+              filesFolder.file(file.name, blob);
+            }
+            
+            updateToastProgress((i + 1) / totalFiles * 0.3); // 30% for gathering files
+          }
+
+          // Add metadata
+          zip.file('metadata.json', JSON.stringify({
+            name: session.name,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+            filesCount: session.files.length,
+            fileMapping: session.files.map(f => ({ id: f.id, name: f.name }))
+          }, null, 2));
+
+          updateToastProgress(0.4);
+
+          // Generate ZIP with progress callback
+          const blob = await zip.generateAsync({ 
+            type: 'blob',
+            compression: totalSize > 100 * 1024 * 1024 ? 'STORE' : 'DEFLATE', // Skip compression for very large files
+            compressionOptions: { level: 3 } // Faster compression
+          }, (metadata) => {
+            updateToastProgress(0.4 + metadata.percent / 100 * 0.6); // 60% for zip generation
+          });
+          
+          saveAs(blob, `${session.name.replace(/[^a-z0-9]/gi, '_')}.zip`);
+          hideToast();
+          showToast('Session exported as ZIP');
+        } catch (error) {
+          console.error('Export error:', error);
+          hideToast();
+          showToast('Export failed', 'error');
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      // ZIP Import
+      const importFromZip = async (file) => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+        
+        if (file.size > 50 * 1024 * 1024) {
+          showToast('Importing...', 'loading', 0);
+        }
+        
+        try {
+          const zip = await JSZip.loadAsync(file);
+          
+          let content = '';
+          let metadata = { name: 'Imported Session', fileMapping: [] };
+          const files = [];
+
+          // Read content
+          const contentFile = zip.file('content.md');
+          if (contentFile) {
+            content = await contentFile.async('string');
+          }
+
+          // Read metadata
+          const metadataFile = zip.file('metadata.json');
+          if (metadataFile) {
+            metadata = JSON.parse(await metadataFile.async('string'));
+          }
+
+          // Read attachments and build new ID mapping
+          const attachments = zip.folder('attachments');
+          const filenameToNewId = {};
+          
+          if (attachments) {
+            const attachmentEntries = Object.entries(attachments.files).filter(
+              ([relativePath, zipEntry]) => !zipEntry.dir && relativePath.includes('/')
+            );
+            
+            for (let i = 0; i < attachmentEntries.length; i++) {
+              const [relativePath, zipEntry] = attachmentEntries[i];
+              const fileName = relativePath.split('/').pop();
+              
+              // Get as blob for IndexedDB storage
+              const blob = await zipEntry.async('blob');
+              const mimeType = getMimeType(fileName);
+              const typedBlob = new Blob([blob], { type: mimeType });
+              
+              const newId = generateId();
+              filenameToNewId[fileName] = newId;
+              
+              // Store in IndexedDB
+              await FileDB.saveFile(newId, typedBlob);
+              
+              // Create object URL for preview
+              const objectUrl = URL.createObjectURL(typedBlob);
+              objectUrlsRef.current.set(newId, objectUrl);
+              
+              files.push({
+                id: newId,
+                name: fileName,
+                type: mimeType,
+                size: blob.size,
+                objectUrl
+              });
+              
+              if (file.size > 50 * 1024 * 1024) {
+                updateToastProgress((i + 1) / attachmentEntries.length);
+              }
+            }
+          }
+
+          // Convert relative paths back to attachment:id references
+          Object.entries(filenameToNewId).forEach(([filename, newId]) => {
+            // Handle both ./attachments/file.png and attachments/file.png
+            const patterns = [
+              new RegExp(`\\./attachments/${filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g'),
+              new RegExp(`attachments/${filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g')
+            ];
+            patterns.forEach(pattern => {
+              content = content.replace(pattern, `attachment:${newId}`);
+            });
+          });
+
+          const newSession = {
+            id: generateId(),
+            name: metadata.name || content.split('\n')[0].replace(/^#+\s*/, '').slice(0, 40) || 'Imported Session',
+            content,
+            files,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          };
+
+          setSessions(prev => [newSession, ...prev]);
+          setActiveSessionId(newSession.id);
+          hideToast();
+          showToast('Session imported successfully');
+        } catch (error) {
+          console.error('Import error:', error);
+          hideToast();
+          showToast('Failed to import ZIP file', 'error');
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      const getMimeType = (filename) => {
+        const ext = filename.split('.').pop().toLowerCase();
+        const types = {
+          'png': 'image/png',
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg',
+          'gif': 'image/gif',
+          'webp': 'image/webp',
+          'svg': 'image/svg+xml',
+          'pdf': 'application/pdf',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'xls': 'application/vnd.ms-excel',
+          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'txt': 'text/plain',
+          'csv': 'text/csv'
+        };
+        return types[ext] || 'application/octet-stream';
+      };
+
+      const renderedContent = useMemo(() => {
+        if (!activeSession?.content) return '';
+        
+        let content = activeSession.content;
+        
+        // Replace attachment:id references with object URLs
+        if (activeSession.files?.length > 0) {
+          activeSession.files.forEach(file => {
+            const pattern = new RegExp(`attachment:${file.id}`, 'g');
+            const url = file.objectUrl || objectUrlsRef.current.get(file.id) || '';
+            content = content.replace(pattern, url);
+          });
+        }
+        
+        return marked.parse(content);
+      }, [activeSession?.content, activeSession?.files]);
+
+      return (
+        <div className="app" onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+          {/* Sidebar */}
+          <aside className="sidebar">
+            <div className="logo">
+              <h1>
+                <div className="logo-icon">✉</div>
+                Compose
+              </h1>
+            </div>
+
+            <div className="sessions-header">
+              <span className="sessions-title">Sessions</span>
+              <button className="new-session-btn" onClick={createSession} title="New Session">+</button>
+            </div>
+
+            <div className="sessions-list">
+              {sessions.map(session => (
+                <div 
+                  key={session.id}
+                  className={`session-item ${session.id === activeSessionId ? 'active' : ''}`}
+                  onClick={() => setActiveSessionId(session.id)}
+                >
+                  <div className="session-name">{session.name}</div>
+                  <div className="session-meta">
+                    <span>{formatDate(session.updatedAt)}</span>
+                    {session.files.length > 0 && (
+                      <span className="session-files-badge">{session.files.length} files</span>
+                    )}
+                  </div>
+                  <div className="session-actions">
+                    <button className="session-action-btn" disabled={isProcessing} onClick={(e) => { e.stopPropagation(); exportAsZip(session); }}>
+                      ↓ Export
+                    </button>
+                    <button className="session-action-btn danger" disabled={isProcessing} onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}>
+                      ✕ Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <main className="main">
+            <div className="toolbar">
+              <div className="toolbar-left">
+                <div className="view-toggle">
+                  <button className={`view-btn ${viewMode === 'edit' ? 'active' : ''}`} onClick={() => setViewMode('edit')}>Edit</button>
+                  <button className={`view-btn ${viewMode === 'split' ? 'active' : ''}`} onClick={() => setViewMode('split')}>Split</button>
+                  <button className={`view-btn ${viewMode === 'preview' ? 'active' : ''}`} onClick={() => setViewMode('preview')}>Preview</button>
+                </div>
+              </div>
+              <div className="toolbar-right">
+                <button className="upload-btn" disabled={isProcessing} onClick={() => fileInputRef.current?.click()}>
+                  📎 Add Files
+                </button>
+                <button className="import-btn" disabled={isProcessing} onClick={() => zipInputRef.current?.click()}>
+                  📦 Import ZIP
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={(e) => handleFilesAdd(e.target.files)}
+                />
+                <input
+                  ref={zipInputRef}
+                  type="file"
+                  accept=".zip"
+                  style={{ display: 'none' }}
+                  onChange={(e) => e.target.files[0] && importFromZip(e.target.files[0])}
+                />
+              </div>
+            </div>
+
+            <div className={`editor-container ${viewMode === 'split' ? 'split' : ''}`}>
+              {(viewMode === 'edit' || viewMode === 'split') && (
+                <div className="editor-pane">
+                  <div className="pane-header">Markdown</div>
+                  <textarea
+                    className="editor-textarea"
+                    value={activeSession?.content || ''}
+                    onChange={handleContentChange}
+                    onPaste={handlePaste}
+                    placeholder="Start writing in Markdown... (Paste images with ⌘V)"
+                    spellCheck="false"
+                  />
+                </div>
+              )}
+              
+              {(viewMode === 'preview' || viewMode === 'split') && (
+                <div className="preview-pane">
+                  <div className="pane-header">Preview</div>
+                  <div 
+                    className="preview-content"
+                    dangerouslySetInnerHTML={{ __html: renderedContent }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Files Section */}
+            <div className="files-section">
+              <div className="files-header" onClick={() => setShowFiles(!showFiles)}>
+                <div className="files-title">
+                  Attachments
+                  <span className="files-count">{activeSession?.files?.length || 0}</span>
+                </div>
+                <span className={`files-toggle ${showFiles ? 'open' : ''}`}>▼</span>
+              </div>
+              
+              {showFiles && (
+                <div className="files-grid">
+                  {activeSession?.files?.length > 0 ? (
+                    activeSession.files.map(file => (
+                      <div key={file.id} className="file-card">
+                        <div className="file-preview">
+                          {file.type.startsWith('image/') ? (
+                            <img src={file.objectUrl || objectUrlsRef.current.get(file.id)} alt={file.name} loading="lazy" />
+                          ) : (
+                            getFileIcon(file.type)
+                          )}
+                        </div>
+                        <div className="file-info">
+                          <div className="file-name" title={file.name}>{file.name}</div>
+                          <div className="file-size">{formatFileSize(file.size)}</div>
+                        </div>
+                        <button className="file-remove" onClick={() => removeFile(file.id)}>✕</button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">
+                      <div className="empty-state-icon">📎</div>
+                      <div className="empty-state-text">Drop files here or click "Add Files"</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </main>
+
+          {/* Drop Zone Overlay */}
+          <div className={`drop-zone ${isDragging ? 'active' : ''}`}>
+            <div className="drop-zone-content">
+              <div className="drop-zone-icon">📥</div>
+              <div className="drop-zone-text">Drop files to attach</div>
+              <div className="drop-zone-hint">Images, documents, and more</div>
+            </div>
+          </div>
+
+          <Toast message={toast.message} type={toast.type} show={toast.show} progress={toast.progress} />
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
