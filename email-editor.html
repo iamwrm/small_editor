@@ -28,6 +28,22 @@
       --danger: #ef4444;
     }
 
+    [data-theme="light"] {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f8f9fa;
+      --bg-tertiary: #e9ecef;
+      --bg-hover: #dee2e6;
+      --border: #ced4da;
+      --border-active: #adb5bd;
+      --text-primary: #212529;
+      --text-secondary: #495057;
+      --text-muted: #868e96;
+      --accent: #e85a24;
+      --accent-soft: rgba(232, 90, 36, 0.12);
+      --success: #0d9668;
+      --danger: #dc3545;
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -756,6 +772,111 @@
       }
     }
 
+    /* Theme Toggle */
+    .theme-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      transition: all 0.2s ease;
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-active);
+    }
+
+    /* Confirm Dialog */
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1002;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .confirm-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .confirm-dialog {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+      transform: scale(0.9);
+      transition: transform 0.2s ease;
+    }
+
+    .confirm-overlay.show .confirm-dialog {
+      transform: scale(1);
+    }
+
+    .confirm-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text-primary);
+    }
+
+    .confirm-message {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .confirm-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .confirm-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid var(--border);
+    }
+
+    .confirm-btn.cancel {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .confirm-btn.cancel:hover {
+      background: var(--bg-hover);
+    }
+
+    .confirm-btn.danger {
+      background: var(--danger);
+      color: white;
+      border-color: var(--danger);
+    }
+
+    .confirm-btn.danger:hover {
+      filter: brightness(1.1);
+    }
+
     /* Animations */
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(10px); }
@@ -948,6 +1069,8 @@
       const [isProcessing, setIsProcessing] = useState(false);
       const [editingSessionId, setEditingSessionId] = useState(null);
       const [editingName, setEditingName] = useState('');
+      const [theme, setTheme] = useState(() => localStorage.getItem('app-theme') || 'dark');
+      const [confirmDialog, setConfirmDialog] = useState({ show: false, sessionId: null, sessionName: '' });
 
       const fileInputRef = useRef(null);
       const zipInputRef = useRef(null);
@@ -975,6 +1098,16 @@
           objectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
         };
       }, []);
+
+      // Apply and persist theme
+      useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('app-theme', theme);
+      }, [theme]);
+
+      const toggleTheme = () => {
+        setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+      };
 
       // Restore object URLs for active session files from IndexedDB
       useEffect(() => {
@@ -1083,6 +1216,26 @@
           setActiveSessionId(sessions.find(s => s.id !== id)?.id);
         }
         showToast('Session deleted');
+      };
+
+      const showDeleteConfirm = (session, e) => {
+        e.stopPropagation();
+        if (sessions.length === 1) {
+          showToast('Cannot delete the last session', 'error');
+          return;
+        }
+        setConfirmDialog({ show: true, sessionId: session.id, sessionName: session.name });
+      };
+
+      const cancelDeleteConfirm = () => {
+        setConfirmDialog({ show: false, sessionId: null, sessionName: '' });
+      };
+
+      const confirmDeleteSession = async () => {
+        if (confirmDialog.sessionId) {
+          await deleteSession(confirmDialog.sessionId);
+        }
+        cancelDeleteConfirm();
       };
 
       const updateSession = (id, updates) => {
@@ -1526,7 +1679,7 @@
                     <button className="session-action-btn" disabled={isProcessing} onClick={(e) => { e.stopPropagation(); exportAsZip(session); }}>
                       ↓ Export
                     </button>
-                    <button className="session-action-btn danger" disabled={isProcessing} onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}>
+                    <button className="session-action-btn danger" disabled={isProcessing} onClick={(e) => showDeleteConfirm(session, e)}>
                       ✕
                     </button>
                   </div>
@@ -1546,6 +1699,9 @@
                 </div>
               </div>
               <div className="toolbar-right">
+                <button className="theme-toggle" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+                  {theme === 'dark' ? '☀️' : '🌙'}
+                </button>
                 <button className="upload-btn" disabled={isProcessing} onClick={() => fileInputRef.current?.click()}>
                   📎 Add Files
                 </button>
@@ -1641,6 +1797,20 @@
               <div className="drop-zone-icon">📥</div>
               <div className="drop-zone-text">Drop files to attach</div>
               <div className="drop-zone-hint">Images, documents, and more</div>
+            </div>
+          </div>
+
+          {/* Confirm Dialog */}
+          <div className={`confirm-overlay ${confirmDialog.show ? 'show' : ''}`} onClick={cancelDeleteConfirm}>
+            <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+              <div className="confirm-title">Delete Session?</div>
+              <div className="confirm-message">
+                Are you sure you want to delete "{confirmDialog.sessionName}"? This action cannot be undone and all attached files will be removed.
+              </div>
+              <div className="confirm-actions">
+                <button className="confirm-btn cancel" onClick={cancelDeleteConfirm}>Cancel</button>
+                <button className="confirm-btn danger" onClick={confirmDeleteSession}>Delete</button>
+              </div>
             </div>
           </div>
 
