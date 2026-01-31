@@ -30,7 +30,7 @@ double benchmark_avx512_sp(size_t iterations) {
     __m512 mul = _mm512_set1_ps(1.0000001f);
     __m512 add = _mm512_set1_ps(0.0000001f);
 
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     for (size_t i = 0; i < iterations; i++) {
         // 10路并行FMA，充分利用CPU流水线
@@ -46,7 +46,7 @@ double benchmark_avx512_sp(size_t iterations) {
         v9 = _mm512_fmadd_ps(v9, mul, add);
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
 
     // 防止编译器优化掉计算
     volatile float sink = _mm512_reduce_add_ps(v0) + _mm512_reduce_add_ps(v1) +
@@ -79,7 +79,7 @@ double benchmark_avx512_dp(size_t iterations) {
     __m512d mul = _mm512_set1_pd(1.0000001);
     __m512d add = _mm512_set1_pd(0.0000001);
 
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     for (size_t i = 0; i < iterations; i++) {
         v0 = _mm512_fmadd_pd(v0, mul, add);
@@ -94,7 +94,7 @@ double benchmark_avx512_dp(size_t iterations) {
         v9 = _mm512_fmadd_pd(v9, mul, add);
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
 
     volatile double sink = _mm512_reduce_add_pd(v0) + _mm512_reduce_add_pd(v1) +
                            _mm512_reduce_add_pd(v2) + _mm512_reduce_add_pd(v3) +
@@ -118,14 +118,14 @@ void run_multithread_benchmark(int num_threads) {
     size_t iterations_per_thread = ITERATIONS / num_threads;
 
     // 单精度多线程测试
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     for (int i = 0; i < num_threads; i++) {
         threads.emplace_back([&, i]() {
             results_sp[i] = benchmark_avx512_sp(iterations_per_thread);
         });
     }
     for (auto& t : threads) t.join();
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
 
     double total_sp = 0;
     for (double r : results_sp) total_sp += r;
@@ -133,7 +133,7 @@ void run_multithread_benchmark(int num_threads) {
     threads.clear();
 
     // 双精度多线程测试
-    start = std::chrono::high_resolution_clock::now();
+    start = std::chrono::steady_clock::now();
     for (int i = 0; i < num_threads; i++) {
         threads.emplace_back([&, i]() {
             results_dp[i] = benchmark_avx512_dp(iterations_per_thread);
