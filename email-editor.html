@@ -778,7 +778,7 @@
     const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
     // Utility functions
-    const generateId = () => Math.random().toString(36).substr(2, 9);
+    const generateId = () => Math.random().toString(36).slice(2, 11);
     const formatDate = (date) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     const formatFileSize = (bytes) => {
       if (bytes < 1024) return bytes + ' B';
@@ -794,6 +794,11 @@
       if (type.includes('zip') || type.includes('archive')) return '📦';
       return '📎';
     };
+
+    const stripTransientFileState = (sessions) => sessions.map(session => ({
+      ...session,
+      files: (session.files || []).map(({ objectUrl, ...file }) => file)
+    }));
 
     // IndexedDB for efficient large file storage
     const FileDB = {
@@ -861,55 +866,6 @@
       }
     };
 
-    // Convert Blob to base64 in chunks (non-blocking)
-    const blobToBase64Async = (blob, onProgress) => {
-      return new Promise((resolve, reject) => {
-        const chunkSize = 1024 * 1024; // 1MB chunks
-        const chunks = [];
-        let offset = 0;
-
-        const readNextChunk = () => {
-          const slice = blob.slice(offset, offset + chunkSize);
-          const reader = new FileReader();
-          
-          reader.onload = () => {
-            chunks.push(new Uint8Array(reader.result));
-            offset += chunkSize;
-            
-            if (onProgress) {
-              onProgress(Math.min(offset / blob.size, 1));
-            }
-
-            if (offset < blob.size) {
-              // Use setTimeout to yield to main thread
-              setTimeout(readNextChunk, 0);
-            } else {
-              // Combine all chunks
-              const combined = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
-              let position = 0;
-              chunks.forEach(chunk => {
-                combined.set(chunk, position);
-                position += chunk.length;
-              });
-              
-              // Convert to base64
-              let binary = '';
-              const len = combined.byteLength;
-              for (let i = 0; i < len; i += 8192) {
-                binary += String.fromCharCode.apply(null, combined.subarray(i, Math.min(i + 8192, len)));
-              }
-              resolve(btoa(binary));
-            }
-          };
-          
-          reader.onerror = () => reject(reader.error);
-          reader.readAsArrayBuffer(slice);
-        };
-
-        readNextChunk();
-      });
-    };
-
     // Toast Component
     const Toast = ({ message, type, show, progress }) => (
       <div className={`toast ${type} ${show ? 'show' : ''}`}>
@@ -927,7 +883,16 @@
     const App = () => {
       const [sessions, setSessions] = useState(() => {
         const saved = localStorage.getItem('email-sessions');
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              return stripTransientFileState(parsed);
+            }
+          } catch (error) {
+            console.error('Failed to parse saved sessions:', error);
+          }
+        }
         const defaultSession = {
           id: generateId(),
           name: 'New Draft',
@@ -966,7 +931,7 @@
 
       // Persist sessions (metadata only, files in IndexedDB)
       useEffect(() => {
-        localStorage.setItem('email-sessions', JSON.stringify(sessions));
+        localStorage.setItem('email-sessions', JSON.stringify(stripTransientFileState(sessions)));
       }, [sessions]);
 
       // Cleanup object URLs on unmount
@@ -984,7 +949,7 @@
           const filesToUpdate = [];
           
           for (const file of activeSession.files) {
-            if (!file.objectUrl && !objectUrlsRef.current.has(file.id)) {
+            if (!objectUrlsRef.current.has(file.id)) {
               const blob = await FileDB.getFile(file.id);
               if (blob) {
                 const url = URL.createObjectURL(blob);
@@ -1026,23 +991,6 @@
       const hideToast = () => {
         setToast(prev => ({ ...prev, show: false }));
       };
-
-      // Get or create object URL for a file
-      const getFilePreviewUrl = useCallback(async (file) => {
-        if (file.objectUrl) return file.objectUrl;
-        if (objectUrlsRef.current.has(file.id)) {
-          return objectUrlsRef.current.get(file.id);
-        }
-        
-        // Try to get blob from IndexedDB
-        const blob = await FileDB.getFile(file.id);
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          objectUrlsRef.current.set(file.id, url);
-          return url;
-        }
-        return null;
-      }, []);
 
       const createSession = () => {
         const newSession = {
@@ -1464,7 +1412,7 @@
         if (activeSession.files?.length > 0) {
           activeSession.files.forEach(file => {
             const pattern = new RegExp(`attachment:${file.id}`, 'g');
-            const url = file.objectUrl || objectUrlsRef.current.get(file.id) || '';
+            const url = objectUrlsRef.current.get(file.id) || file.objectUrl || '';
             content = content.replace(pattern, url);
           });
         }
@@ -1612,7 +1560,7 @@
                       <div key={file.id} className="file-card">
                         <div className="file-preview">
                           {file.type.startsWith('image/') ? (
-                            <img src={file.objectUrl || objectUrlsRef.current.get(file.id)} alt={file.name} loading="lazy" />
+                            <img src={objectUrlsRef.current.get(file.id) || file.objectUrl} alt={file.name} loading="lazy" />
                           ) : (
                             getFileIcon(file.type)
                           )}
